@@ -113,7 +113,7 @@ textarea{width:100%;min-height:160px;background:var(--bg);color:#ffffff;border:2
 
   <button class="btn main" id="startBtn">スタート / ចាប់ផ្តើម</button>
   <button class="btn sub" id="retryHomeBtn">前回まちがえた問題 / សំណួរដែលខុស</button>
-  <button class="btn sub" id="manageBtn">問題の管理（追加・入れかえ）</button>
+  <button class="btn sub hidden" id="manageBtn">問題の管理（管理者のみ）</button>
   <p class="note" id="bankInfo" style="text-align:center"></p>
 </section>
 
@@ -178,6 +178,7 @@ textarea{width:100%;min-height:160px;background:var(--bg);color:#ffffff;border:2
     <button class="btn sub" id="resetBtn">最初の問題に戻す</button>
   </div>
   <button class="btn sub" id="backBtn">ホームへ戻る</button>
+  <button class="btn sub" id="adminOffBtn">管理者モードを終了（この端末で管理画面を隠す）</button>
 </section>
 
 </div>
@@ -686,7 +687,7 @@ let qs=[], idx=0, correct=0, wrongs=[], answered=false, lastTotal=0;
 
 const $ = id => document.getElementById(id);
 function show(id){["home","quiz","end","manage"].forEach(s=>$(s).classList.toggle("hidden",s!==id));window.scrollTo(0,0)}
-function esc(s){return String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
+function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
 function shuffle(a){a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
 function keyOf(q){return q.ja}
 
@@ -733,7 +734,7 @@ function renderHome(){
     `<button class="chip real ${selMode==="real"?"on":""}" data-m="real" ${realN?"":"disabled style=\"opacity:.4\""}>✓ 出題確認済みだけ (${realN})</button>`;
   $("modeNote").textContent= realN
     ? (selMode==="real"?"本番で出題が確認された問題だけを出します。":"出題確認済みの問題は、約3倍出やすくなっています。")
-    : "まだ出題確認済みの問題はありません。解説の下のボタンか「問題の管理」で✓を付けられます。";
+    : (isAdmin?"まだ出題確認済みの問題はありません。解説の下のボタンか「問題の管理」で✓を付けられます。":"まだ出題確認済みの問題はありません。");
   const cats=["すべて",...new Set(base.map(q=>q.cat||"その他"))];
   if(!cats.includes(selCat)) selCat="すべて";
   $("catChips").innerHTML=cats.map(c=>{
@@ -852,7 +853,7 @@ function parseTSV(text){
     if(["×","✕","x","false","0","誤"].includes(a)) ans=false;
     if(!c[1]||ans===null){bad.push(i+1);return}
     const real=["✓","✔","★","1","○","本番","確認済み"].includes(c[6]||"");
-    out.push({cat:c[0]||"その他",ja:c[1],km:c[2]||"",ans,exp_ja:c[4]||"",exp_km:c[5]||"",...(real?{real:true}:{})});
+    const item={cat:c[0]||"その他",ja:c[1],km:c[2]||"",ans:ans,exp_ja:c[4]||"",exp_km:c[5]||""}; if(real)item.real=true; out.push(item);
   });
   return {out,bad};
 }
@@ -892,6 +893,28 @@ $("resetBtn").onclick=()=>{
   bank=BUILTIN.slice(); save(KEY_BANK,bank); $("importMsg").textContent="最初の問題に戻しました";
 };
 $("backBtn").onclick=()=>{renderHome();show("home")};
+
+/* ---------- 管理者モード ----------
+   管理画面は受験者には表示しない。
+   管理者は ?admin=sbfcda48b27e 付きのURLを1回開くと、その端末で管理画面が使えるようになる。
+   ※問題の追加・変更はその端末の中だけに保存され、ほかの人のアプリには影響しない */
+const ADMIN_KEY="sbfcda48b27e", KEY_ADMIN="licExam_admin_v1";
+var isAdmin = load(KEY_ADMIN)===true;
+(()=>{
+  let q; try{q=new URLSearchParams(location.search)}catch(e){return}
+  const a=q.get("admin"); if(a===null) return;
+  if(a===ADMIN_KEY){isAdmin=true;save(KEY_ADMIN,true)}
+  else if(a==="off"){isAdmin=false;try{localStorage.removeItem(KEY_ADMIN)}catch(e){}}
+  // 管理用のキーをアドレスバーから消す（うっかり共有しないように）
+  q.delete("admin");
+  try{history.replaceState(null,"",location.pathname+(q.toString()?"?"+q:"")+location.hash)}catch(e){}
+})();
+$("manageBtn").classList.toggle("hidden",!isAdmin);
+$("adminOffBtn").onclick=()=>{
+  if(!confirm("この端末で管理画面を隠しますか？（もう一度使うには管理者用URLを開きます）"))return;
+  isAdmin=false;try{localStorage.removeItem(KEY_ADMIN)}catch(e){}
+  $("manageBtn").classList.add("hidden");renderHome();show("home");
+};
 
 renderHome();
 </script>
